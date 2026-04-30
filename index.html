@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>🍔 WHOOPER BAR • КУХОННОЕ ТАБЛО</title>
+    <title>🍔 WHOPPER BAR • КУХОННОЕ ТАБЛО</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -36,6 +36,7 @@
             align-items: center;
             justify-content: center;
             gap: 15px;
+            cursor: pointer;
         }
 
         .columns {
@@ -108,7 +109,7 @@
 
         .order-card.ready {
             border-left-color: #4CAF50;
-            background: linear-gradient(135deg, #3d5a3d, #3a4d3a);
+            background: linear-gradient(135deg, #2d4a2d, #1f3a1f);
         }
 
         .order-number {
@@ -205,11 +206,52 @@
             background: #4CAF50;
             color: white;
         }
+
+        .sound-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #fec233;
+            color: #2d1d0c;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: 0.1s;
+            z-index: 100;
+        }
+
+        .sound-toggle:active {
+            transform: scale(0.95);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            background: #fec233;
+            color: #2d1d0c;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: 700;
+            z-index: 1000;
+            animation: fadeOut 2s forwards;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        @keyframes fadeOut {
+            0% { opacity: 1; transform: translateY(0); }
+            70% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); visibility: hidden; }
+        }
     </style>
 </head>
 <body>
     <div class="board">
-        <h1>
+        <h1 id="title">
             <i class="fas fa-utensils"></i>
             КУХОННОЕ ТАБЛО
             <i class="fas fa-tv"></i>
@@ -250,9 +292,9 @@
         </div>
     </div>
 
-    <audio id="notificationSound" preload="auto">
-        <source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mpeg">
-    </audio>
+    <button class="sound-toggle" id="soundToggle">
+        <i class="fas fa-volume-up"></i>
+    </button>
 
     <script>
         const firebaseConfig = {
@@ -268,8 +310,10 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let lastOrderIds = new Set();
+        let lastWaitingIds = new Set();
+        let lastReadyIds = new Set();
         let notificationEnabled = true;
+        let audioContext = null;
 
         // Форматирование времени
         function formatTime(timestamp) {
@@ -278,50 +322,95 @@
             return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         }
 
-        // Воспроизведение звука
-        function playSound() {
+        // Проигрывание звука через Web Audio (без внешних файлов)
+        function playBeep() {
             if (!notificationEnabled) return;
-            const audio = document.getElementById('notificationSound');
-            audio.play().catch(e => console.log('Звук не воспроизведён:', e));
+            
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = 880;
+                gainNode.gain.value = 0.3;
+                
+                oscillator.start();
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + 0.5);
+                oscillator.stop(audioContext.currentTime + 0.5);
+                
+                // Возобновляем аудиоконтекст если он в suspended состоянии
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+            } catch(e) {
+                console.log('Звук не воспроизведён:', e);
+            }
         }
 
-        // Обновление табло
+        // Показать уведомление
+        function showToast(message) {
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) existingToast.remove();
+            
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+
+        // Обновление табло с правильной фильтрацией
         function updateBoard() {
-            db.ref('orders').on('value', (snapshot) => {
+            const ordersRef = db.ref('orders');
+            
+            ordersRef.once('value', (snapshot) => {
                 const orders = snapshot.val() || {};
                 const waitingOrders = [];
                 const readyOrders = [];
+                const newWaitingIds = new Set();
+                const newReadyIds = new Set();
 
-                // Фильтруем только заказы В РЕСТОРАНЕ (не доставка)
+                // Фильтруем только заказы В РЕСТОРАНЕ
                 Object.entries(orders).forEach(([id, order]) => {
-                    // Пропускаем доставку и завершённые заказы
+                    // Пропускаем доставку
                     if (order.orderType !== 'restaurant') return;
+                    // Пропускаем завершённые и переданные курьеру
                     if (order.status === 'done' || order.status === 'courier') return;
                     
                     if (order.status === 'waiting') {
-                        waitingOrders.push({ id, ...order });
+                        waitingOrders.push({ id, ...order, status: 'waiting' });
+                        newWaitingIds.add(id);
                     } else if (order.status === 'ready') {
-                        readyOrders.push({ id, ...order });
-                    }
-                    
-                    // Проверка на новый заказ
-                    if (order.status === 'waiting' && !lastOrderIds.has(id)) {
-                        lastOrderIds.add(id);
-                        playSound();
-                        
-                        // Визуальный фидбек
-                        const waitingList = document.getElementById('waitingList');
-                        if (waitingList) {
-                            const newCard = document.createElement('div');
-                            newCard.className = 'highlight';
-                            setTimeout(() => {
-                                if (newCard) newCard.classList.remove('highlight');
-                            }, 500);
-                        }
+                        readyOrders.push({ id, ...order, status: 'ready' });
+                        newReadyIds.add(id);
                     }
                 });
 
-                // Сортируем по времени создания (сначала новые)
+                // Проверяем новые заказы
+                let newOrderFound = false;
+                for (const id of newWaitingIds) {
+                    if (!lastWaitingIds.has(id)) {
+                        newOrderFound = true;
+                        break;
+                    }
+                }
+                
+                if (newOrderFound && notificationEnabled) {
+                    playBeep();
+                    showToast('🔔 НОВЫЙ ЗАКАЗ!');
+                }
+                
+                // Обновляем Set'ы для последующего сравнения
+                lastWaitingIds = newWaitingIds;
+                lastReadyIds = newReadyIds;
+
+                // Сортируем (новые сверху)
                 waitingOrders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
                 readyOrders.sort((a, b) => (b.readyAt || 0) - (a.readyAt || 0));
 
@@ -344,7 +433,7 @@
                                 <i class="fas fa-clock"></i> Заказ создан: ${formatTime(order.createdAt)}
                             </div>
                             <div class="order-items">
-                                ${order.items.map(item => `<span>${item.name} x${item.quantity}</span>`).join('')}
+                                ${order.items.map(item => `<span>${escapeHtml(item.name)} x${item.quantity}</span>`).join('')}
                             </div>
                             <div class="order-total">
                                 <i class="fas fa-ruble-sign"></i> ${order.total} ₽
@@ -368,7 +457,7 @@
                                 <i class="fas fa-clock"></i> Готов с: ${formatTime(order.readyAt)}
                             </div>
                             <div class="order-items">
-                                ${order.items.map(item => `<span>${item.name} x${item.quantity}</span>`).join('')}
+                                ${order.items.map(item => `<span>${escapeHtml(item.name)} x${item.quantity}</span>`).join('')}
                             </div>
                             <div class="order-total">
                                 <i class="fas fa-ruble-sign"></i> ${order.total} ₽
@@ -376,58 +465,88 @@
                         </div>
                     `).join('');
                 }
+            }).catch(error => {
+                console.error('Ошибка загрузки заказов:', error);
+                document.getElementById('waitingList').innerHTML = '<div class="empty-message"><i class="fas fa-exclamation-triangle"></i> Ошибка подключения</div>';
+                document.getElementById('readyList').innerHTML = '<div class="empty-message"><i class="fas fa-exclamation-triangle"></i> Ошибка подключения</div>';
             });
         }
 
-        // Очищаем старые ID раз в минуту, чтобы Set не разрастался
-        setInterval(() => {
-            db.ref('orders').once('value', (snapshot) => {
-                const currentIds = new Set();
-                const orders = snapshot.val() || {};
-                Object.entries(orders).forEach(([id, order]) => {
-                    if (order.orderType === 'restaurant' && (order.status === 'waiting' || order.status === 'ready')) {
-                        currentIds.add(id);
-                    }
-                });
-                lastOrderIds = currentIds;
+        // Защита от XSS
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // Слушаем изменения в реальном времени
+        function listenToChanges() {
+            db.ref('orders').on('child_changed', (snapshot) => {
+                updateBoard();
             });
-        }, 60000);
+            
+            db.ref('orders').on('child_added', (snapshot) => {
+                updateBoard();
+            });
+            
+            db.ref('orders').on('child_removed', (snapshot) => {
+                updateBoard();
+            });
+        }
 
-        // Запускаем обновление
-        updateBoard();
+        // Управление звуком
+        function initSoundToggle() {
+            const toggleBtn = document.getElementById('soundToggle');
+            const icon = toggleBtn.querySelector('i');
+            
+            // Восстанавливаем состояние из localStorage
+            const saved = localStorage.getItem('tablo_sound_enabled');
+            if (saved === 'false') {
+                notificationEnabled = false;
+                icon.className = 'fas fa-volume-mute';
+            }
+            
+            toggleBtn.addEventListener('click', () => {
+                notificationEnabled = !notificationEnabled;
+                localStorage.setItem('tablo_sound_enabled', notificationEnabled);
+                
+                if (notificationEnabled) {
+                    icon.className = 'fas fa-volume-up';
+                    showToast('🔔 Звук ВКЛЮЧЁН');
+                    // Тестовый звук
+                    playBeep();
+                } else {
+                    icon.className = 'fas fa-volume-mute';
+                    showToast('🔕 Звук ВЫКЛЮЧЁН');
+                }
+            });
+        }
 
-        // Добавляем возможность отключить звук (по клику на заголовок)
-        document.querySelector('h1').addEventListener('click', () => {
-            notificationEnabled = !notificationEnabled;
-            const msg = notificationEnabled ? '🔔 Звук ВКЛЮЧЁН' : '🔕 Звук ВЫКЛЮЧЁН';
-            const toast = document.createElement('div');
-            toast.textContent = msg;
-            toast.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background: #fec233;
-                color: #2d1d0c;
-                padding: 10px 20px;
-                border-radius: 30px;
-                font-weight: 700;
-                z-index: 1000;
-                animation: fadeOut 2s forwards;
-            `;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
+        // Активация звука по клику на заголовок (пользовательское взаимодействие)
+        document.getElementById('title').addEventListener('click', () => {
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+                showToast('🔊 Звук активирован');
+            }
         });
 
-        // Добавляем CSS для анимации исчезновения тоста
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes fadeOut {
-                0% { opacity: 1; transform: translateY(0); }
-                70% { opacity: 1; transform: translateY(0); }
-                100% { opacity: 0; transform: translateY(-20px); visibility: hidden; }
-            }
-        `;
-        document.head.appendChild(style);
+        // Запуск
+        function init() {
+            updateBoard();
+            listenToChanges();
+            initSoundToggle();
+            
+            // Обновляем каждые 10 секунд на всякий случай (дубль-проверка)
+            setInterval(() => {
+                updateBoard();
+            }, 10000);
+        }
+
+        init();
     </script>
 </body>
 </html>

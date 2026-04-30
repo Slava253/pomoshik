@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🍔 WHOOPER BAR • КУХОННОЕ ТАБЛО</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Courier New', monospace;
+        }
+
+        body {
+            background: #1a1a1a;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .board {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #fec233;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-shadow: 3px 3px 0 #c53a1f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .column {
+            background: #2d2d2d;
+            border-radius: 30px;
+            overflow: hidden;
+            border: 3px solid #fec233;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .column-header {
+            background: #c53a1f;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 1.8rem;
+            font-weight: 800;
+        }
+
+        .column-header i {
+            margin-right: 10px;
+        }
+
+        .column-header .count {
+            background: rgba(255,255,255,0.3);
+            border-radius: 40px;
+            padding: 5px 15px;
+            font-size: 1.2rem;
+            margin-left: 10px;
+        }
+
+        .orders-list {
+            padding: 20px;
+            min-height: 500px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .order-card {
+            background: #3d3d3d;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 8px solid;
+            transition: all 0.2s;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .order-card.waiting {
+            border-left-color: #ff9800;
+            background: linear-gradient(135deg, #3d3d3d, #3a3a3a);
+        }
+
+        .order-card.ready {
+            border-left-color: #4CAF50;
+            background: linear-gradient(135deg, #3d5a3d, #3a4d3a);
+        }
+
+        .order-number {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #fec233;
+            display: inline-block;
+            background: #1a1a1a;
+            padding: 5px 20px;
+            border-radius: 40px;
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .order-time {
+            color: #aaa;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+        }
+
+        .order-items {
+            color: #ddd;
+            margin: 10px 0;
+            font-size: 0.9rem;
+        }
+
+        .order-items span {
+            display: inline-block;
+            background: #c53a1f;
+            padding: 2px 10px;
+            border-radius: 20px;
+            margin: 2px;
+            font-size: 0.85rem;
+        }
+
+        .order-total {
+            color: #fec233;
+            font-weight: 700;
+            margin-top: 10px;
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            font-size: 1.2rem;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .highlight {
+            animation: pulse 0.5s ease;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); background: #ff9800; }
+            50% { transform: scale(1.02); background: #ffcc80; }
+            100% { transform: scale(1); background: #3d3d3d; }
+        }
+
+        @media (max-width: 768px) {
+            .columns {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            .order-number {
+                font-size: 1.5rem;
+            }
+            .column-header {
+                font-size: 1.3rem;
+            }
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-left: 10px;
+        }
+
+        .status-badge.waiting {
+            background: #ff9800;
+            color: white;
+        }
+
+        .status-badge.ready {
+            background: #4CAF50;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="board">
+        <h1>
+            <i class="fas fa-utensils"></i>
+            КУХОННОЕ ТАБЛО
+            <i class="fas fa-tv"></i>
+        </h1>
+        
+        <div class="columns">
+            <!-- Столбик "ГОТОВИТСЯ" -->
+            <div class="column">
+                <div class="column-header">
+                    <i class="fas fa-hourglass-half"></i>
+                    ГОТОВИТСЯ
+                    <span class="count" id="waitingCount">0</span>
+                </div>
+                <div class="orders-list" id="waitingList">
+                    <div class="empty-message">
+                        <i class="fas fa-check-circle"></i> Нет заказов в приготовлении
+                    </div>
+                </div>
+            </div>
+
+            <!-- Столбик "ГОТОВ" -->
+            <div class="column">
+                <div class="column-header">
+                    <i class="fas fa-check-circle"></i>
+                    ГОТОВО К ВЫДАЧЕ
+                    <span class="count" id="readyCount">0</span>
+                </div>
+                <div class="orders-list" id="readyList">
+                    <div class="empty-message">
+                        <i class="fas fa-smile"></i> Нет готовых заказов
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <i class="fas fa-sync-alt fa-spin"></i> Автообновление • Только заказы в ресторане
+        </div>
+    </div>
+
+    <audio id="notificationSound" preload="auto">
+        <source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBlZ5ZtyTXgtXxSJAx1jOxwhTrzlHRJmo",
+            authDomain: "bk-cashier.firebaseapp.com",
+            databaseURL: "https://bk-cashier-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "bk-cashier",
+            storageBucket: "bk-cashier.firebasestorage.app",
+            messagingSenderId: "385000840969",
+            appId: "1:385000840969:web:1ec8d09176b6551dc0fdd8"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let lastOrderIds = new Set();
+        let notificationEnabled = true;
+
+        // Форматирование времени
+        function formatTime(timestamp) {
+            if (!timestamp) return 'только что';
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        // Воспроизведение звука
+        function playSound() {
+            if (!notificationEnabled) return;
+            const audio = document.getElementById('notificationSound');
+            audio.play().catch(e => console.log('Звук не воспроизведён:', e));
+        }
+
+        // Обновление табло
+        function updateBoard() {
+            db.ref('orders').on('value', (snapshot) => {
+                const orders = snapshot.val() || {};
+                const waitingOrders = [];
+                const readyOrders = [];
+
+                // Фильтруем только заказы В РЕСТОРАНЕ (не доставка)
+                Object.entries(orders).forEach(([id, order]) => {
+                    // Пропускаем доставку и завершённые заказы
+                    if (order.orderType !== 'restaurant') return;
+                    if (order.status === 'done' || order.status === 'courier') return;
+                    
+                    if (order.status === 'waiting') {
+                        waitingOrders.push({ id, ...order });
+                    } else if (order.status === 'ready') {
+                        readyOrders.push({ id, ...order });
+                    }
+                    
+                    // Проверка на новый заказ
+                    if (order.status === 'waiting' && !lastOrderIds.has(id)) {
+                        lastOrderIds.add(id);
+                        playSound();
+                        
+                        // Визуальный фидбек
+                        const waitingList = document.getElementById('waitingList');
+                        if (waitingList) {
+                            const newCard = document.createElement('div');
+                            newCard.className = 'highlight';
+                            setTimeout(() => {
+                                if (newCard) newCard.classList.remove('highlight');
+                            }, 500);
+                        }
+                    }
+                });
+
+                // Сортируем по времени создания (сначала новые)
+                waitingOrders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                readyOrders.sort((a, b) => (b.readyAt || 0) - (a.readyAt || 0));
+
+                // Обновляем счётчики
+                document.getElementById('waitingCount').innerText = waitingOrders.length;
+                document.getElementById('readyCount').innerText = readyOrders.length;
+
+                // Рендерим список "ГОТОВИТСЯ"
+                const waitingList = document.getElementById('waitingList');
+                if (waitingOrders.length === 0) {
+                    waitingList.innerHTML = '<div class="empty-message"><i class="fas fa-check-circle"></i> Нет заказов в приготовлении</div>';
+                } else {
+                    waitingList.innerHTML = waitingOrders.map(order => `
+                        <div class="order-card waiting" data-order-id="${order.id}">
+                            <div class="order-number">
+                                #${order.id}
+                                <span class="status-badge waiting">⏳ готовится</span>
+                            </div>
+                            <div class="order-time">
+                                <i class="fas fa-clock"></i> Заказ создан: ${formatTime(order.createdAt)}
+                            </div>
+                            <div class="order-items">
+                                ${order.items.map(item => `<span>${item.name} x${item.quantity}</span>`).join('')}
+                            </div>
+                            <div class="order-total">
+                                <i class="fas fa-ruble-sign"></i> ${order.total} ₽
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                // Рендерим список "ГОТОВ"
+                const readyList = document.getElementById('readyList');
+                if (readyOrders.length === 0) {
+                    readyList.innerHTML = '<div class="empty-message"><i class="fas fa-smile"></i> Нет готовых заказов</div>';
+                } else {
+                    readyList.innerHTML = readyOrders.map(order => `
+                        <div class="order-card ready" data-order-id="${order.id}">
+                            <div class="order-number">
+                                #${order.id}
+                                <span class="status-badge ready">✅ готов</span>
+                            </div>
+                            <div class="order-time">
+                                <i class="fas fa-clock"></i> Готов с: ${formatTime(order.readyAt)}
+                            </div>
+                            <div class="order-items">
+                                ${order.items.map(item => `<span>${item.name} x${item.quantity}</span>`).join('')}
+                            </div>
+                            <div class="order-total">
+                                <i class="fas fa-ruble-sign"></i> ${order.total} ₽
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            });
+        }
+
+        // Очищаем старые ID раз в минуту, чтобы Set не разрастался
+        setInterval(() => {
+            db.ref('orders').once('value', (snapshot) => {
+                const currentIds = new Set();
+                const orders = snapshot.val() || {};
+                Object.entries(orders).forEach(([id, order]) => {
+                    if (order.orderType === 'restaurant' && (order.status === 'waiting' || order.status === 'ready')) {
+                        currentIds.add(id);
+                    }
+                });
+                lastOrderIds = currentIds;
+            });
+        }, 60000);
+
+        // Запускаем обновление
+        updateBoard();
+
+        // Добавляем возможность отключить звук (по клику на заголовок)
+        document.querySelector('h1').addEventListener('click', () => {
+            notificationEnabled = !notificationEnabled;
+            const msg = notificationEnabled ? '🔔 Звук ВКЛЮЧЁН' : '🔕 Звук ВЫКЛЮЧЁН';
+            const toast = document.createElement('div');
+            toast.textContent = msg;
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: #fec233;
+                color: #2d1d0c;
+                padding: 10px 20px;
+                border-radius: 30px;
+                font-weight: 700;
+                z-index: 1000;
+                animation: fadeOut 2s forwards;
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        });
+
+        // Добавляем CSS для анимации исчезновения тоста
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeOut {
+                0% { opacity: 1; transform: translateY(0); }
+                70% { opacity: 1; transform: translateY(0); }
+                100% { opacity: 0; transform: translateY(-20px); visibility: hidden; }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

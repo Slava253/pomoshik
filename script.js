@@ -4,7 +4,7 @@
 const CONFIG = {
     // ---------- OpenWeatherMap ----------
     weatherApiKey: '4b31256732a1ff6a0b3d80ee3dbe6f32',
-    defaultCity: 'Moscow',
+    defaultCity: 'Sevastopol',
 
     // ---------- DeepSeek ----------
     // ВАЖНО: старый ключ sk-417d... скомпрометирован — создайте НОВЫЙ

@@ -2,21 +2,46 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="theme-color" content="#1e1e2f">
     <title>Голосовой помощник</title>
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="assistant">
+        <!-- Верхняя панель -->
+        <div class="topbar">
+            <button id="themeBtn" class="icon-btn" title="Тема">🌙</button>
+            <div class="persona-select">
+                <select id="personaSelect" title="Персона">
+                    <option value="normal">🙂 Обычный</option>
+                    <option value="joker">😄 Шутник</option>
+                    <option value="scientist">🧑‍🔬 Учёный</option>
+                    <option value="sarcastic">😏 Сарказм</option>
+                    <option value="philosopher">🧘 Философ</option>
+                </select>
+            </div>
+            <button id="historyBtn" class="icon-btn" title="История">📜</button>
+        </div>
+
         <h1>Голосовой помощник</h1>
 
-        <div class="status" id="status">Нажмите на микрофон или напишите сообщение</div>
-
-        <button class="mic-btn" id="micBtn" aria-label="Говорить">
-            <svg viewBox="0 0 24 24" width="48" height="48">
-                <path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5.3-3a5.3 5.3 0 0 1-10.6 0H4a7.3 7.3 0 0 0 6.7 7.2V21h2.6v-2.8A7.3 7.3 0 0 0 20 11h-2.7z"/>
-            </svg>
+        <!-- Анимированный шар -->
+        <button class="orb" id="micBtn" aria-label="Говорить">
+            <span class="orb-inner"></span>
         </button>
+
+        <div class="status" id="status">Нажмите на шар или напишите сообщение</div>
+
+        <!-- Таймер (скрыт по умолчанию) -->
+        <div class="timer" id="timer" style="display:none"></div>
+
+        <!-- Настройки голоса -->
+        <div class="voice-settings">
+            <select id="voiceSelect" title="Голос"></select>
+            <input type="range" id="volumeRange" min="0" max="1" step="0.05" value="1" title="Громкость">
+        </div>
 
         <!-- Текстовый ввод -->
         <div class="text-input-row">
@@ -26,6 +51,31 @@
 
         <div class="transcript" id="transcript"></div>
         <div class="response" id="response"></div>
+
+        <!-- Кнопки-инструменты -->
+        <div class="toolbar">
+            <button id="copyBtn" class="tool-btn" title="Копировать ответ">📋</button>
+            <button id="todoBtn" class="tool-btn" title="Список дел">✅</button>
+            <button id="clearBtn" class="tool-btn" title="Очистить чат">🗑️</button>
+            <button id="wakeBtn" class="tool-btn" title="Wake word">👂</button>
+        </div>
+
+        <!-- Панель истории -->
+        <div class="panel" id="historyPanel">
+            <h3>История диалога</h3>
+            <div id="historyList" class="history-list"></div>
+            <button id="clearHistoryBtn" class="tool-btn">Очистить историю</button>
+        </div>
+
+        <!-- Панель списка дел -->
+        <div class="panel" id="todoPanel">
+            <h3>Список дел</h3>
+            <div class="todo-input">
+                <input type="text" id="todoInput" placeholder="Новая задача...">
+                <button id="todoAddBtn">+</button>
+            </div>
+            <ul id="todoList" class="todo-list"></ul>
+        </div>
     </div>
 
     <script src="script.js"></script>

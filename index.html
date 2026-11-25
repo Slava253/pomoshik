@@ -3,12 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Голосовой помощник</title>
+    <title>Продвинутый голосовой помощник</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="assistant">
         <h1>Голосовой помощник</h1>
+
+        <!-- Выбор провайдера озвучки -->
+        <div class="tts-selector">
+            <label>
+                <input type="radio" name="tts" value="browser" checked> Браузер
+            </label>
+            <label>
+                <input type="radio" name="tts" value="elevenlabs"> ElevenLabs
+            </label>
+            <label>
+                <input type="radio" name="tts" value="yandex"> Yandex
+            </label>
+        </div>
 
         <div class="status" id="status">Нажмите на кнопку и говорите</div>
 

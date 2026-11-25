@@ -13,7 +13,7 @@ const CONFIG = {
 
     // Нейросеть: 'deepseek' или 'openai'
     llmProvider: 'deepseek',
-    deepseekApiKey: 'ВАШ_КЛЮЧ_DEEPSEEK',
+    deepseekApiKey: 'sk-bbf5b49c56484725ba286117a4899566',
     openaiApiKey: 'ВАШ_КЛЮЧ_OPENAI',
     // Модель для DeepSeek (например, 'deepseek-chat') или OpenAI (например, 'gpt-4o-mini')
     llmModel: 'deepseek-chat',

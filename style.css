@@ -1,8 +1,4 @@
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
     min-height: 100vh;
@@ -15,80 +11,48 @@ body {
     padding: 20px;
 }
 
-.assistant {
-    text-align: center;
-    max-width: 500px;
-    width: 100%;
+.assistant { text-align: center; max-width: 560px; width: 100%; }
+
+h1 { font-weight: 300; font-size: 1.8rem; margin-bottom: 16px; letter-spacing: 1px; }
+
+.tts-selector {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: #b0b0cc;
 }
 
-h1 {
-    font-weight: 300;
-    font-size: 1.8rem;
-    margin-bottom: 20px;
-    letter-spacing: 1px;
-}
+.tts-selector label { cursor: pointer; display: flex; align-items: center; gap: 4px; }
 
-.status {
-    color: #9d9db8;
-    margin-bottom: 30px;
-    font-size: 0.95rem;
-    min-height: 1.2em;
-}
+.status { color: #9d9db8; margin-bottom: 24px; font-size: 0.95rem; min-height: 1.2em; }
 
 .mic-btn {
-    width: 140px;
-    height: 140px;
-    border-radius: 50%;
-    border: none;
-    background: linear-gradient(145deg, #4a4ae0, #6b6bf5);
-    color: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 30px;
+    width: 140px; height: 140px; border-radius: 50%; border: none;
+    background: linear-gradient(145deg, #4a4ae0, #6b6bf5); color: white;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 24px;
     box-shadow: 0 10px 40px rgba(107, 107, 245, 0.4);
     transition: transform 0.2s, box-shadow 0.2s;
 }
+.mic-btn:hover { transform: scale(1.05); }
+.mic-btn:active { transform: scale(0.97); }
 
-.mic-btn:hover {
-    transform: scale(1.05);
-}
-
-.mic-btn:active {
-    transform: scale(0.97);
-}
-
-/* Пульсация при прослушивании */
 .mic-btn.listening {
     background: linear-gradient(145deg, #e04a4a, #f56b6b);
     box-shadow: 0 10px 40px rgba(245, 107, 107, 0.6);
     animation: pulse 1.5s infinite;
 }
-
 @keyframes pulse {
     0%   { box-shadow: 0 0 0 0 rgba(245, 107, 107, 0.7); }
     70%  { box-shadow: 0 0 0 30px rgba(245, 107, 107, 0); }
     100% { box-shadow: 0 0 0 0 rgba(245, 107, 107, 0); }
 }
 
-.transcript,
-.response {
-    min-height: 30px;
-    font-size: 1rem;
-    line-height: 1.5;
-    padding: 12px;
-    border-radius: 12px;
-    margin-top: 10px;
-    word-wrap: break-word;
+.transcript, .response {
+    min-height: 30px; font-size: 1rem; line-height: 1.5;
+    padding: 12px; border-radius: 12px; margin-top: 10px; word-wrap: break-word;
 }
-
-.transcript {
-    color: #c7c7e0;
-    font-style: italic;
-}
-
-.response {
-    color: #b8f5c0;
-    background: rgba(184, 245, 192, 0.08);
-}
+.transcript { color: #c7c7e0; font-style: italic; }
+.response { color: #b8f5c0; background: rgba(184, 245, 192, 0.08); }

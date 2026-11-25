@@ -1,95 +1,110 @@
 // ============================================================
-// 1. НАСТРОЙКИ
+// 1. НАСТРОЙКИ — ВСТАВЬТЕ СВОИ КЛЮЧИ
 // ============================================================
 const CONFIG = {
-    // --- Нейросеть (DeepSeek/OpenAI) ---
-    llmProvider: 'deepseek',
-    deepseekApiKey: 'ВАШ_НОВЫЙ_КЛЮЧ_DEEPSEEK', // СРОЧНО замените на новый ключ!
-    llmModel: 'deepseek-chat',
+    // ---------- OpenWeatherMap ----------
+    // Получить: https://home.openweathermap.org/api_keys
+    weatherApiKey: '4b31256732a1ff6a0b3d80ee3dbe6f32',
+    defaultCity: 'Sevastopol',
 
-    // --- Home Assistant ---
+    // ---------- DeepSeek ----------
+    // Получить: https://platform.deepseek.com/api_keys
+    // ВАЖНО: старый ключ sk-417d... скомпрометирован, создайте НОВЫЙ
+    deepseekApiKey: 'sk-330d6470bef1442e96ce381659946fe6',
+    deepseekModel: 'deepseek-chat',
+
+    // ---------- Home Assistant (опционально) ----------
     haUrl: 'http://localhost:8123',
-    haToken: 'ВАШ_LONG_LIVED_ACCESS_TOKEN',
+    haToken: 'ВСТАВЬТЕ_LONG_LIVED_ACCESS_TOKEN',
 
-    // --- Яндекс.Станция (Home Assistant entity_id) ---
-    // Узнать можно в HA: Инструменты разработчика -> Состояния -> найти media_player.yandex_station...
-    yandexStationEntity: 'media_player.yandex_station_mini', 
-
-    // --- TTS (опционально) ---
-    elevenLabsApiKey: 'ВАШ_КЛЮЧ_ELEVENLABS',
-    elevenLabsVoiceId: '21m00Tcm4TlvDq8ikWAM',
-    yandexApiKey: 'ВАШ_КЛЮЧ_YANDEX_SPEECHKIT',
-    yandexFolderId: 'ВАШ_FOLDER_ID',
-    yandexVoice: 'filipp',
+    // ---------- Яндекс.Станция (опционально) ----------
+    yandexStationEntity: 'media_player.yandex_station_mini',
 };
 
 // ============================================================
-// 2. БАЗОВЫЕ ЭЛЕМЕНТЫ
+// 2. DOM + РАСПОЗНАВАНИЕ РЕЧИ
 // ============================================================
-const micBtn = document.getElementById('micBtn');
-const statusEl = document.getElementById('status');
+const micBtn       = document.getElementById('micBtn');
+const statusEl     = document.getElementById('status');
 const transcriptEl = document.getElementById('transcript');
-const responseEl = document.getElementById('response');
+const responseEl   = document.getElementById('response');
+const textInput    = document.getElementById('textInput');
+const sendBtn      = document.getElementById('sendBtn');
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (!SpeechRecognition) {
-    statusEl.textContent = '❌ Браузер не поддерживает распознавание речи.';
-    micBtn.disabled = true;
-    throw new Error('SpeechRecognition not supported');
-}
 
-const recognition = new SpeechRecognition();
-recognition.lang = 'ru-RU';
-recognition.continuous = true; // Важно для непрерывного диалога
-recognition.interimResults = true;
-
+let recognition = null;
 let isRecognitionExpectedToRun = false;
 let isSpeaking = false;
 const conversationHistory = [];
 
-// ============================================================
-// 3. ОЗВУЧКА (TTS) — БРАУЗЕР / ELEVENLABS / YANDEX
-// ============================================================
-function getSelectedTTS() {
-    return document.querySelector('input[name="tts"]:checked')?.value || 'browser';
+if (!SpeechRecognition) {
+    statusEl.textContent = '❌ Браузер не поддерживает распознавание речи. Но можно писать текстом.';
+    micBtn.disabled = true;
+} else {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'ru-RU';
+    recognition.continuous = true;
+    recognition.interimResults = true;
 }
 
+// ============================================================
+// 3. TTS (озвучка) — только браузерный speechSynthesis
+// ============================================================
 function speakBrowser(text) {
     return new Promise((resolve) => {
         speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ru-RU';
-        const ruVoice = speechSynthesis.getVoices().find(v => v.lang.startsWith('ru'));
-        if (ruVoice) utterance.voice = ruVoice;
-        utterance.onend = resolve;
-        utterance.onerror = resolve;
-        speechSynthesis.speak(utterance);
+
+        const doSpeak = () => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ru-RU';
+            utterance.rate = 1;
+            utterance.pitch = 1;
+
+            const voices = speechSynthesis.getVoices();
+            const ruVoice = voices.find(v => v.lang === 'ru-RU')
+                         || voices.find(v => v.lang.startsWith('ru'));
+            if (ruVoice) utterance.voice = ruVoice;
+
+            utterance.onend = resolve;
+            utterance.onerror = resolve;
+            speechSynthesis.speak(utterance);
+        };
+
+        // В Chrome голоса грузятся асинхронно — ждём событие
+        if (speechSynthesis.getVoices().length === 0) {
+            speechSynthesis.onvoiceschanged = () => {
+                speechSynthesis.onvoiceschanged = null;
+                doSpeak();
+            };
+        } else {
+            doSpeak();
+        }
     });
 }
 
-async function speakElevenLabs(text) { /* ... (код из предыдущего ответа) ... */ }
-async function speakYandex(text) { /* ... (код из предыдущего ответа) ... */ }
-
 async function speak(text) {
     isSpeaking = true;
-    responseEl.textContent = '🤖 ' + text;
-    const provider = getSelectedTTS();
-    if (provider === 'elevenlabs') await speakElevenLabs(text);
-    else if (provider === 'yandex') await speakYandex(text);
-    else await speakBrowser(text);
+    await speakBrowser(text);
     isSpeaking = false;
 }
 
 // ============================================================
-// 4. HOME ASSISTANT — УПРАВЛЕНИЕ ЯНДЕКС.СТАНЦИЕЙ
+// 4. ОТПРАВКА ОТВЕТА (текст/голос в зависимости от режима)
 // ============================================================
-
-// Универсальная функция вызова сервисов HA
-async function haCallService(domain, service, serviceData) {
-    if (!CONFIG.haToken || CONFIG.haToken.startsWith('ВАШ')) {
-        console.warn('Home Assistant токен не настроен.');
-        return false;
+async function sendReply(text, mode) {
+    // mode: 'voice' — озвучиваем, 'text' — только показываем
+    responseEl.textContent = '🤖 ' + text;
+    if (mode === 'voice') {
+        await speak(text);
     }
+}
+
+// ============================================================
+// 5. HOME ASSISTANT (опционально)
+// ============================================================
+async function haCallService(domain, service, serviceData) {
+    if (!CONFIG.haToken || CONFIG.haToken.startsWith('ВСТАВЬТЕ')) return false;
     try {
         const response = await fetch(`${CONFIG.haUrl}/api/services/${domain}/${service}`, {
             method: 'POST',
@@ -99,151 +114,191 @@ async function haCallService(domain, service, serviceData) {
             },
             body: JSON.stringify(serviceData),
         });
-        if (!response.ok) throw new Error(`HA API error: ${response.status}`);
-        return true;
+        return response.ok;
     } catch (err) {
-        console.error('Ошибка вызова сервиса HA:', err);
+        console.error('HA error:', err);
         return false;
     }
 }
 
-// Отправка TTS (фразы) на Станцию
-async function yandexSay(text) {
-    // Ограничение облачного режима — 100 символов
-    const truncatedText = text.substring(0, 100);
-    return haCallService('media_player', 'play_media', {
-        entity_id: CONFIG.yandexStationEntity,
-        media_content_id: truncatedText,
-        media_content_type: 'text' // Это стандартный тип для TTS на Станцию[reference:4]
-    });
-}
-
-// Отправка голосовой команды на Станцию (как будто вы сказали Алисе)
-async function yandexCommand(commandText) {
-    // Сервис send_command появился в версии интеграции 3.16.0[reference:5]
-    return haCallService('yandex_station', 'send_command', {
-        entity_id: CONFIG.yandexStationEntity,
-        text: commandText // Текст команды, например "включи мою музыку"[reference:6]
-    });
-}
-
 // ============================================================
-// 5. ОБРАБОТКА КОМАНД
+// 6. ПОГОДА (OpenWeatherMap)
 // ============================================================
-function getTimeString() { return new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
-function getDateString() { return new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
-
-async function handleCommand(text) {
-    const cmd = text.toLowerCase().trim();
-
-    // --- Быстрые команды ---
-    if (cmd.match(/^(привет|здравствуй)/)) return 'Привет! Чем помочь?';
-    if (cmd.match(/который час|время/)) return `Сейчас ${getTimeString()}`;
-    if (cmd.match(/какая дата|сегодня число/)) return `Сегодня ${getDateString()}`;
-    if (cmd.includes('как дела')) return 'Всё отлично!';
-    if (cmd.includes('спасибо')) return 'Всегда пожалуйста!';
-
-    // --- Управление Яндекс.Станцией ---
-    
-    // 1. "Скажи <текст>" -> TTS на колонке
-    const sayMatch = cmd.match(/(?:скажи|передай|объяви)\s+(.+)/i);
-    if (sayMatch) {
-        const phrase = sayMatch[1];
-        const success = await yandexSay(phrase);
-        return success ? `Передал на колонку: «${phrase}»` : 'Не удалось отправить TTS на колонку. Проверьте настройки.';
+async function getWeather(city = CONFIG.defaultCity) {
+    if (!CONFIG.weatherApiKey || CONFIG.weatherApiKey.startsWith('ВСТАВЬТЕ')) {
+        return 'Ключ OpenWeatherMap не задан.';
     }
+    try {
+        const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${CONFIG.weatherApiKey}&units=metric&lang=ru`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    // 2. "Включи/поставь <запрос>" -> голосовая команда на колонку
-    const playMatch = cmd.match(/(?:включи|поставь|запусти)\s+(.+)/i);
-    if (playMatch) {
-        const command = playMatch[1];
-        // Если это похоже на музыку/плейлист, отправляем как команду на колонку
-        const success = await yandexCommand(command);
-        return success ? `Отправил команду на колонку: «${command}»` : 'Не удалось отправить команду на колонку.';
+        const data = await response.json();
+        const temp = Math.round(data.main.temp);
+        const feels = Math.round(data.main.feels_like);
+        const desc = data.weather[0].description;
+        return `В ${data.name} сейчас ${desc}, температура ${temp} градусов, ощущается как ${feels}.`;
+    } catch (err) {
+        console.error('Weather error:', err);
+        return `Не удалось получить погоду для «${city}».`;
     }
-
-    // 3. "Стоп" или "Выключи музыку" -> остановка воспроизведения
-    if (cmd.match(/^(стоп|выключи музыку|останови)/)) {
-        const success = await haCallService('media_player', 'media_stop', {
-            entity_id: CONFIG.yandexStationEntity
-        });
-        return success ? 'Остановил воспроизведение на колонке.' : 'Не удалось остановить колонку.';
-    }
-
-    // 4. "Громкость 50" -> установка громкости
-    const volumeMatch = cmd.match(/громкость\s+(\d+)/);
-    if (volumeMatch) {
-        const level = Math.min(100, Math.max(0, parseInt(volumeMatch[1], 10))) / 100;
-        const success = await haCallService('media_player', 'volume_set', {
-            entity_id: CONFIG.yandexStationEntity,
-            volume_level: level
-        });
-        return success ? `Установил громкость на ${volumeMatch[1]}%.` : 'Не удалось изменить громкость.';
-    }
-
-    // --- Всё остальное -> Нейросеть ---
-    return await askLLM(text);
 }
 
 // ============================================================
-// 6. НЕЙРОСЕТЬ (DeepSeek/OpenAI)
+// 7. НЕЙРОСЕТЬ (DeepSeek)
 // ============================================================
 async function askLLM(userText) {
-    const provider = CONFIG.llmProvider;
-    let apiKey, baseURL, model;
-    if (provider === 'deepseek') {
-        apiKey = CONFIG.deepseekApiKey;
-        baseURL = 'https://api.deepseek.com/v1';
-        model = CONFIG.llmModel;
-    } else {
-        apiKey = CONFIG.openaiApiKey;
-        baseURL = 'https://api.openai.com/v1';
-        model = CONFIG.llmModel;
+    if (!CONFIG.deepseekApiKey || CONFIG.deepseekApiKey.startsWith('ВСТАВЬТЕ')) {
+        return 'Ключ DeepSeek не задан. Я умею только встроенные команды.';
     }
-    if (!apiKey || apiKey.startsWith('ВАШ')) return 'Ключ нейросети не настроен.';
 
     conversationHistory.push({ role: 'user', content: userText });
+
     const messages = [
-        { role: 'system', content: 'Ты — голосовой помощник. Отвечай кратко и дружелюбно.' },
+        {
+            role: 'system',
+            content: 'Ты — голосовой помощник. Отвечай кратко, дружелюбно и по делу. Не используй markdown, списки и сложное форматирование — твой ответ может быть озвучен.',
+        },
         ...conversationHistory.slice(-10),
     ];
 
     try {
-        const response = await fetch(`${baseURL}/chat/completions`, {
+        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 300 }),
+            headers: {
+                'Authorization': `Bearer ${CONFIG.deepseekApiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: CONFIG.deepseekModel,
+                messages: messages,
+                temperature: 0.7,
+                max_tokens: 400,
+            }),
         });
-        if (!response.ok) throw new Error(`LLM API ${response.status}`);
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`DeepSeek ${response.status}: ${errText}`);
+        }
+
         const data = await response.json();
         const reply = data.choices[0].message.content.trim();
         conversationHistory.push({ role: 'assistant', content: reply });
         return reply;
     } catch (err) {
-        console.error('Ошибка LLM:', err);
-        return 'Не удалось получить ответ от нейросети.';
+        console.error('LLM error:', err);
+        return 'Не удалось получить ответ от нейросети. Проверьте ключ и интернет.';
     }
 }
 
 // ============================================================
-// 7. УПРАВЛЕНИЕ СЛУШАНИЕМ (для мобильных)
+// 8. ОБРАБОТКА КОМАНД
+// ============================================================
+function getTimeString() {
+    return new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+function getDateString() {
+    return new Date().toLocaleDateString('ru-RU', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    });
+}
+
+async function handleCommand(text) {
+    const cmd = text.toLowerCase().trim();
+
+    // --- Быстрые встроенные команды ---
+    if (cmd.match(/^(привет|здравствуй)/)) return 'Привет! Чем помочь?';
+    if (cmd.match(/который час|сколько времени/)) return `Сейчас ${getTimeString()}.`;
+    if (cmd.match(/какая дата|какое сегодня число/)) return `Сегодня ${getDateString()}.`;
+    if (cmd.includes('как дела')) return 'Всё отлично! Готов помогать.';
+    if (cmd.includes('спасибо')) return 'Всегда пожалуйста!';
+    if (cmd.match(/^(пока|до свидания)/)) return 'До встречи!';
+
+    // --- Погода ---
+    if (cmd.match(/погод|температура/)) {
+        // Пытаемся вытащить город: «погода в Москве», «какая погода в Питере»
+        const cityMatch = cmd.match(/(?:в|во)\s+([а-яёa-z\-]+)/i);
+        const city = cityMatch ? cityMatch[1] : CONFIG.defaultCity;
+        return await getWeather(city);
+    }
+
+    // --- Свет (Home Assistant) ---
+    if (cmd.match(/(включи|зажги).*свет/)) {
+        const area = (cmd.match(/(?:в|на|во)\s+([а-яёa-z\-]+)/i) || [])[1];
+        if (!area) return 'Уточните, где включить свет.';
+        const ok = await haCallService('light', 'turn_on', { area_id: area });
+        return ok ? `Включаю свет: ${area}.` : 'Не удалось управлять светом.';
+    }
+    if (cmd.match(/(выключи|погаси).*свет/)) {
+        const area = (cmd.match(/(?:в|на|во)\s+([а-яёa-z\-]+)/i) || [])[1];
+        if (!area) return 'Уточните, где выключить свет.';
+        const ok = await haCallService('light', 'turn_off', { area_id: area });
+        return ok ? `Выключаю свет: ${area}.` : 'Не удалось управлять светом.';
+    }
+
+    // --- Всё остальное → DeepSeek ---
+    return await askLLM(text);
+}
+
+// ============================================================
+// 9. ТЕКСТОВЫЙ ВВОД (отвечаем текстом, без озвучки)
+// ============================================================
+async function handleTextSubmit() {
+    const text = textInput.value.trim();
+    if (!text) return;
+
+    textInput.value = '';
+    sendBtn.disabled = true;
+    statusEl.textContent = '⏳ Думаю...';
+    transcriptEl.textContent = '⌨️ ' + text;
+    responseEl.textContent = '';
+
+    try {
+        const reply = await handleCommand(text);
+        await sendReply(reply, 'text'); // ← без озвучки
+        statusEl.textContent = 'Нажмите на микрофон или напишите сообщение';
+    } catch (err) {
+        console.error(err);
+        responseEl.textContent = '⚠️ Ошибка обработки сообщения';
+        statusEl.textContent = 'Нажмите на микрофон или напишите сообщение';
+    } finally {
+        sendBtn.disabled = false;
+        textInput.focus();
+    }
+}
+
+sendBtn.addEventListener('click', handleTextSubmit);
+textInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        handleTextSubmit();
+    }
+});
+
+// ============================================================
+// 10. ГОЛОСОВОЙ РЕЖИМ (отвечаем голосом)
 // ============================================================
 function forceStopAndReset() {
     isRecognitionExpectedToRun = false;
     isSpeaking = false;
-    try { recognition.abort(); } catch (e) {}
+    try { recognition?.abort(); } catch (e) {}
     speechSynthesis.cancel();
     micBtn.classList.remove('listening');
-    statusEl.textContent = 'Нажмите на кнопку и говорите';
+    statusEl.textContent = 'Нажмите на микрофон или напишите сообщение';
 }
 
 function startListening() {
+    if (!recognition) return;
     forceStopAndReset();
+
     setTimeout(() => {
         isRecognitionExpectedToRun = true;
         transcriptEl.textContent = '';
         responseEl.textContent = '';
-        try { recognition.start(); } catch (e) {
+        try {
+            recognition.start();
+        } catch (e) {
             console.warn('start() error:', e.message);
             isRecognitionExpectedToRun = false;
         }
@@ -251,43 +306,58 @@ function startListening() {
 }
 
 micBtn.addEventListener('click', () => {
-    if (isRecognitionExpectedToRun || isSpeaking) forceStopAndReset();
-    else startListening();
+    if (isRecognitionExpectedToRun || isSpeaking) {
+        forceStopAndReset();
+    } else {
+        startListening();
+    }
 });
 
-recognition.onstart = () => {
-    micBtn.classList.add('listening');
-    statusEl.textContent = '🎤 Слушаю...';
-};
+if (recognition) {
+    recognition.onstart = () => {
+        micBtn.classList.add('listening');
+        statusEl.textContent = '🎤 Слушаю...';
+    };
 
-recognition.onresult = async (event) => {
-    let final = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) final += event.results[i][0].transcript;
-    }
-    if (final) {
-        transcriptEl.textContent = '🗣 ' + final;
-        statusEl.textContent = '⏳ Думаю...';
-        const reply = await handleCommand(final);
-        await speak(reply);
-        statusEl.textContent = isRecognitionExpectedToRun ? '🎤 Слушаю...' : 'Нажмите на кнопку';
-    }
-};
-
-recognition.onerror = (event) => {
-    if (['no-speech', 'aborted'].includes(event.error)) return;
-    console.error('Speech error:', event.error);
-};
-
-recognition.onend = () => {
-    micBtn.classList.remove('listening');
-    if (isRecognitionExpectedToRun && !isSpeaking) {
-        setTimeout(() => {
-            if (isRecognitionExpectedToRun && !isSpeaking) {
-                try { recognition.start(); } catch (e) {}
+    recognition.onresult = async (event) => {
+        let finalText = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+                finalText += event.results[i][0].transcript;
             }
-        }, 150);
-    }
-};
+        }
 
+        if (finalText) {
+            transcriptEl.textContent = '🗣 ' + finalText;
+            statusEl.textContent = '⏳ Думаю...';
+
+            const reply = await handleCommand(finalText);
+            await sendReply(reply, 'voice'); // ← с озвучкой
+
+            statusEl.textContent = isRecognitionExpectedToRun
+                ? '🎤 Слушаю...'
+                : 'Нажмите на микрофон или напишите сообщение';
+        }
+    };
+
+    recognition.onerror = (event) => {
+        if (['no-speech', 'aborted'].includes(event.error)) return;
+        console.error('Speech error:', event.error);
+    };
+
+    recognition.onend = () => {
+        micBtn.classList.remove('listening');
+        // Непрерывный режим: перезапускаем, если пользователь не остановил
+        if (isRecognitionExpectedToRun && !isSpeaking) {
+            setTimeout(() => {
+                if (isRecognitionExpectedToRun && !isSpeaking) {
+                    try { recognition.start(); } catch (e) {}
+                }
+            }, 150);
+        }
+    };
+}
+
+// Прогрев голосов браузера
 speechSynthesis.onvoiceschanged = () => { speechSynthesis.getVoices(); };
+speechSynthesis.getVoices();

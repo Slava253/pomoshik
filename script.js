@@ -43,7 +43,10 @@ const micBtn = $('micBtn'), statusEl = $('status'), transcriptEl = $('transcript
       copyBtn = $('copyBtn'), todoBtn = $('todoBtn'), todoPanel = $('todoPanel'),
       todoInput = $('todoInput'), todoAddBtn = $('todoAddBtn'), todoListEl = $('todoList'),
       clearBtn = $('clearBtn'), wakeBtn = $('wakeBtn'),
-      timerEl = $('timer');
+      timerEl = $('timer'),
+      profileBtn = $('profileBtn'), profilePanel = $('profilePanel'),
+      nameInput = $('nameInput'), saveNameBtn = $('saveNameBtn'),
+      logoutBtn = $('logoutBtn'), profileHint = $('profileHint');
 
 // ============================================================
 // 3. СОСТОЯНИЕ
@@ -56,6 +59,7 @@ let lastAssistantReply = '';
 
 let conversationHistory = loadFromStorage('convHistory', []);
 let todos = loadFromStorage('todos', []);
+let userName = localStorage.getItem('userName') || '';
 let currentTimer = null;
 let timerInterval = null;
 let cachedWeather = null;
@@ -73,11 +77,33 @@ function loadFromStorage(key, fallback) {
 function saveToStorage(key, val) {
     try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
+function saveUserName(name) {
+    userName = name.trim();
+    localStorage.setItem('userName', userName);
+    updateGreeting();
+}
+function updateGreeting() {
+    const h1 = document.querySelector('h1');
+    if (userName) {
+        h1.textContent = `Привет, ${userName}!`;
+        profileHint.textContent = `Вы вошли как ${userName}. Нейросеть обращается к вам по имени.`;
+        nameInput.value = userName;
+        document.body.classList.remove('logged-out');
+    } else {
+        h1.textContent = 'Голосовой помощник';
+        profileHint.textContent = 'Имя сохраняется только в вашем браузере. Нейросеть будет к вам обращаться по имени.';
+        nameInput.value = '';
+        document.body.classList.add('logged-out');
+    }
+}
 
 // ============================================================
 // 5. ТЕМА
 // ============================================================
-const savedTheme = localStorage.getItem('theme') || 'dark';
+const savedTheme = localStorage.getItem('theme') || (() => {
+    const h = new Date().getHours();
+    return (h >= 7 && h < 20) ? 'light' : 'dark';
+})();
 document.body.setAttribute('data-theme', savedTheme);
 themeBtn.textContent = savedTheme === 'dark' ? '🌙' : '☀️';
 
@@ -88,14 +114,6 @@ themeBtn.addEventListener('click', () => {
     localStorage.setItem('theme', next);
     themeBtn.textContent = next === 'dark' ? '🌙' : '☀️';
 });
-
-// Авто-тема по времени (только если пользователь не выбрал)
-if (!localStorage.getItem('theme')) {
-    const h = new Date().getHours();
-    const auto = (h >= 7 && h < 20) ? 'light' : 'dark';
-    document.body.setAttribute('data-theme', auto);
-    themeBtn.textContent = auto === 'dark' ? '🌙' : '☀️';
-}
 
 // ============================================================
 // 6. РАСПОЗНАВАНИЕ РЕЧИ
@@ -111,7 +129,7 @@ if (!SpeechRecognition) {
 }
 
 // ============================================================
-// 7. TTS (браузерный) + выбор голоса + громкость
+// 7. TTS
 // ============================================================
 let ruVoices = [];
 function refreshVoices() {
@@ -134,12 +152,8 @@ function refreshVoices() {
 speechSynthesis.onvoiceschanged = refreshVoices;
 refreshVoices();
 
-voiceSelect.addEventListener('change', () => {
-    localStorage.setItem('voiceIdx', voiceSelect.value);
-});
-volumeRange.addEventListener('input', () => {
-    localStorage.setItem('volume', volumeRange.value);
-});
+voiceSelect.addEventListener('change', () => localStorage.setItem('voiceIdx', voiceSelect.value));
+volumeRange.addEventListener('input', () => localStorage.setItem('volume', volumeRange.value));
 volumeRange.value = localStorage.getItem('volume') || 1;
 
 function speakBrowser(text) {
@@ -209,7 +223,7 @@ async function haGetStates() {
 }
 
 // ============================================================
-// 10. ПОГОДА (с кэшем)
+// 10. ПОГОДА
 // ============================================================
 async function getWeather(city = CONFIG.defaultCity) {
     if (!CONFIG.weatherApiKey || CONFIG.weatherApiKey.startsWith('ВСТАВЬТЕ'))
@@ -234,7 +248,7 @@ async function getWeather(city = CONFIG.defaultCity) {
 }
 
 // ============================================================
-// 11. НОВОСТИ (RSS через rss2json)
+// 11. НОВОСТИ
 // ============================================================
 async function getNews(limit = 5) {
     try {
@@ -252,7 +266,7 @@ async function getNews(limit = 5) {
 }
 
 // ============================================================
-// 12. КУРСЫ ВАЛЮТ (без ключа)
+// 12. КУРСЫ ВАЛЮТ
 // ============================================================
 async function getCurrency(base = 'USD', target = 'RUB') {
     try {
@@ -268,7 +282,7 @@ async function getCurrency(base = 'USD', target = 'RUB') {
 }
 
 // ============================================================
-// 13. DEEPSEEK (с retry)
+// 13. DEEPSEEK
 // ============================================================
 async function askLLM(userText) {
     if (!CONFIG.deepseekApiKey || CONFIG.deepseekApiKey.startsWith('ВСТАВЬТЕ'))
@@ -276,8 +290,12 @@ async function askLLM(userText) {
 
     conversationHistory.push({ role: 'user', content: userText });
     const persona = PERSONAS[personaSelect.value] || PERSONAS.normal;
+    let personaText = persona;
+    if (userName) {
+        personaText += ` Обращайся к пользователю по имени: ${userName}. Если здороваешься — поздоровайся лично.`;
+    }
     const messages = [
-        { role: 'system', content: persona },
+        { role: 'system', content: personaText },
         ...conversationHistory.slice(-10),
     ];
 
@@ -318,18 +336,63 @@ async function askLLM(userText) {
 }
 
 // ============================================================
-// 14. ИГРЫ / РАЗВЛЕЧЕНИЯ
+// 14. КАЛЬКУЛЯТОР
+// ============================================================
+function safeCalc(expr) {
+    expr = expr.replace(/,/g, '.')
+               .replace(/[хx×]/gi, '*')
+               .replace(/[:÷]/g, '/')
+               .replace(/[−–—]/g, '-')
+               .replace(/\^/g, '**')
+               .replace(/корень из\s*/gi, 'Math.sqrt')
+               .replace(/(\d+)%/g, '($1/100)')
+               .replace(/\s+/g, '');
+
+    if (!/^[\d+\-*/().Mathsqrtpow%*]+$/i.test(expr)) throw new Error('Недопустимые символы');
+    if (expr.length > 100) throw new Error('Слишком длинное выражение');
+
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict"; return (' + expr + ')')();
+    if (typeof result !== 'number' || !isFinite(result)) throw new Error('Не число');
+    return result;
+}
+
+function tryCalc(text) {
+    let t = text.toLowerCase().trim();
+    t = t.replace(/^(сколько будет|посчитай|вычисли|калькулятор|рассчитай)\s*/i, '')
+         .replace(/\?+$/, '')
+         .trim();
+
+    t = t
+        .replace(/\s*плюс\s*/g, '+')
+        .replace(/\s*минус\s*/g, '-')
+        .replace(/\s*умножить на\s*/g, '*')
+        .replace(/\s*умножить\s*/g, '*')
+        .replace(/\s*разделить на\s*/g, '/')
+        .replace(/\s*разделить\s*/g, '/')
+        .replace(/\s*делить на\s*/g, '/')
+        .replace(/\s*в степени\s*/g, '**')
+        .replace(/\s*корень из\s*/g, 'sqrt');
+
+    if (!/[\d]/.test(t)) return null;
+    if (!/[+\-*/^%]|sqrt/.test(t)) return null;
+
+    try {
+        const result = safeCalc(t);
+        return Math.round(result * 1e10) / 1e10;
+    } catch {
+        return null;
+    }
+}
+
+// ============================================================
+// 15. ИГРЫ
 // ============================================================
 let guessGame = null;
 let quizGame = null;
 
-function rollDice() {
-    const n = Math.floor(Math.random() * 6) + 1;
-    return `Выпало ${n}.`;
-}
-function flipCoin() {
-    return Math.random() < 0.5 ? 'Орёл!' : 'Решка!';
-}
+function rollDice() { return `Выпало ${Math.floor(Math.random() * 6) + 1}.`; }
+function flipCoin() { return Math.random() < 0.5 ? 'Орёл!' : 'Решка!'; }
 function randomJoke() {
     const jokes = [
         'Программист ставит на ночь два стакана: один с водой, другой пустой — на случай, если захочет пить, и если не захочет.',
@@ -349,7 +412,6 @@ function randomAdvice() {
     ];
     return advice[Math.floor(Math.random() * advice.length)];
 }
-
 function startGuessGame() {
     guessGame = { secret: Math.floor(Math.random() * 100) + 1, attempts: 0 };
     return 'Я загадал число от 1 до 100. Попробуй угадать!';
@@ -364,30 +426,26 @@ function playGuess(n) {
     }
     return n < guessGame.secret ? `Больше. (попытка ${guessGame.attempts})` : `Меньше. (попытка ${guessGame.attempts})`;
 }
-
 async function startQuiz() {
     quizGame = { score: 0, current: null };
     const q = await askLLM('Задай один короткий вопрос для викторины с 4 вариантами ответов (А, Б, В, Г). В формате: вопрос. А) ... Б) ... В) ... Г) ... Правильный ответ: X. Не раскрывай ответ сразу, просто напиши вопрос и варианты.');
     quizGame.current = q;
     return q + ' Какой твой ответ?';
 }
-
 async function answerQuiz(ans) {
     if (!quizGame || !quizGame.current) return 'Викторина не начата. Скажи: «Викторина».';
     const check = await askLLM(`Проверь ответ. Вопрос: ${quizGame.current}. Пользователь ответил: ${ans}. Ответь коротко: правильно или неправильно, и назови правильный вариант.`);
     quizGame.current = null;
     return check + ' Скажи «Викторина», чтобы играть дальше.';
 }
-
 async function tellStory() {
     return await askLLM('Расскажи короткую добрую сказку на ночь (4-6 предложений) про дракона и робота. Без markdown.');
 }
 
 // ============================================================
-// 15. ТАЙМЕРЫ И НАПОМИНАНИЯ
+// 16. ТАЙМЕРЫ
 // ============================================================
 function parseDuration(text) {
-    // "5 минут", "1 час", "30 секунд"
     const m = text.match(/(\d+)\s*(сек|мин|час|ч|с|м)/i);
     if (!m) return null;
     const n = parseInt(m[1], 10);
@@ -414,7 +472,6 @@ function startTimer(ms) {
         clearInterval(timerInterval);
         timerEl.style.display = 'none';
         await speak('Время вышло!');
-        // звуковой сигнал
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const o = ctx.createOscillator();
@@ -428,7 +485,6 @@ function startTimer(ms) {
     }, ms);
 }
 
-// Звуковой сигнал начала/конца слушания
 function beep(freq = 660, duration = 120) {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -443,7 +499,7 @@ function beep(freq = 660, duration = 120) {
 }
 
 // ============================================================
-// 16. СПИСОК ДЕЛ
+// 17. СПИСОК ДЕЛ
 // ============================================================
 function renderTodos() {
     todoListEl.innerHTML = '';
@@ -487,14 +543,9 @@ todoInput.addEventListener('keydown', e => { if (e.key === 'Enter') { addTodo(to
 renderTodos();
 
 // ============================================================
-// 17. ИСТОРИЯ
+// 18. ИСТОРИЯ
 // ============================================================
 function addHistory(role, text) {
-    if (role === 'user') {
-        conversationHistory.push({ role: 'user', content: text });
-        saveToStorage('convHistory', conversationHistory);
-    }
-    // роль assistant уже добавлена в askLLM, но для встроенных ответов добавим и тут
     const item = document.createElement('div');
     item.className = `history-item ${role}`;
     item.textContent = (role === 'user' ? '👤 ' : '🤖 ') + text;
@@ -518,7 +569,7 @@ clearHistoryBtn.addEventListener('click', () => {
 });
 
 // ============================================================
-// 18. УТИЛИТЫ
+// 19. УТИЛИТЫ
 // ============================================================
 function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -529,7 +580,7 @@ function getDateString() {
 }
 
 // ============================================================
-// 19. ОБРАБОТКА КОМАНД
+// 20. ОБРАБОТКА КОМАНД
 // ============================================================
 async function handleCommand(text) {
     const cmd = text.toLowerCase().trim();
@@ -540,8 +591,22 @@ async function handleCommand(text) {
         return 'Молчу.';
     }
 
-    // --- Приветствия ---
-    if (cmd.match(/^(привет|здравствуй|хай)/)) return 'Привет! Чем помочь?';
+    // --- Калькулятор ---
+    if (cmd.match(/посчитай|сколько будет|вычисли|калькулятор|рассчитай|плюс|минус|умножить|разделить|корень из|в степени|[\d]\s*[+\-*/^%]\s*[\d]/)) {
+        const result = tryCalc(cmd);
+        if (result !== null) return `Получается ${result}.`;
+        if (cmd.match(/посчитай|сколько будет|вычисли|калькулятор/)) {
+            return 'Не смог разобрать выражение. Попробуйте, например: «Сколько будет 15 умножить на 8».';
+        }
+    }
+
+    // --- Приветствие ---
+    if (cmd.match(/^(привет|здравствуй|хай)/)) {
+        return userName ? `Привет, ${userName}! Чем помочь?` : 'Привет! Чем помочь?';
+    }
+    if (cmd.match(/как меня зовут|моё имя/)) {
+        return userName ? `Вас зовут ${userName}.` : 'Вы пока не представились. Откройте профиль 👤 и введите имя.';
+    }
     if (cmd.match(/который час|сколько времени/)) return `Сейчас ${getTimeString()}.`;
     if (cmd.match(/какая дата|какое сегодня число/)) return `Сегодня ${getDateString()}.`;
     if (cmd.includes('как дела')) return 'Всё отлично! Готов помогать.';
@@ -645,7 +710,7 @@ async function handleCommand(text) {
 }
 
 // ============================================================
-// 20. ТЕКСТОВЫЙ ВВОД
+// 21. ТЕКСТОВЫЙ ВВОД
 // ============================================================
 async function handleTextSubmit() {
     const text = textInput.value.trim();
@@ -674,7 +739,7 @@ textInput.addEventListener('keydown', e => {
 });
 
 // ============================================================
-// 21. ГОЛОСОВОЙ РЕЖИМ
+// 22. ГОЛОСОВОЙ РЕЖИМ
 // ============================================================
 function forceStopAndReset() {
     isRecognitionExpectedToRun = false;
@@ -739,7 +804,7 @@ if (recognition) {
 }
 
 // ============================================================
-// 22. ТУЛБАР
+// 23. ТУЛБАР
 // ============================================================
 copyBtn.addEventListener('click', async () => {
     if (!lastAssistantReply) return;
@@ -753,11 +818,13 @@ copyBtn.addEventListener('click', async () => {
 todoBtn.addEventListener('click', () => {
     todoPanel.classList.toggle('open');
     historyPanel.classList.remove('open');
+    profilePanel.classList.remove('open');
 });
 
 historyBtn.addEventListener('click', () => {
     historyPanel.classList.toggle('open');
     todoPanel.classList.remove('open');
+    profilePanel.classList.remove('open');
 });
 
 clearBtn.addEventListener('click', () => {
@@ -769,7 +836,7 @@ clearBtn.addEventListener('click', () => {
     lastAssistantReply = '';
 });
 
-// Wake word (простая реализация: бесконечное слушание, активация по фразе)
+// Wake word
 let wakeMode = false;
 wakeBtn.addEventListener('click', () => {
     wakeMode = !wakeMode;
@@ -783,20 +850,52 @@ wakeBtn.addEventListener('click', () => {
 });
 
 // ============================================================
-// 23. PWA
+// 24. ПРОФИЛЬ
+// ============================================================
+profileBtn.addEventListener('click', () => {
+    profilePanel.classList.toggle('open');
+    todoPanel.classList.remove('open');
+    historyPanel.classList.remove('open');
+});
+
+saveNameBtn.addEventListener('click', () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+        profileHint.textContent = 'Введите имя, чтобы сохранить.';
+        return;
+    }
+    saveUserName(name);
+    profileHint.textContent = `Готово! Теперь я зову вас ${name}.`;
+    setTimeout(() => profilePanel.classList.remove('open'), 1200);
+});
+
+nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveNameBtn.click();
+});
+
+logoutBtn.addEventListener('click', () => {
+    if (confirm('Выйти из профиля? Имя будет удалено.')) {
+        localStorage.removeItem('userName');
+        saveUserName('');
+    }
+});
+
+// ============================================================
+// 25. PWA
 // ============================================================
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('service-worker.js').catch(() => {});
 }
 
 // ============================================================
-// 24. ОФЛАЙН / ОНЛАЙН
+// 26. ОФЛАЙН / ОНЛАЙН
 // ============================================================
 window.addEventListener('offline', () => statusEl.textContent = '📴 Нет интернета');
 window.addEventListener('online', () => statusEl.textContent = 'Нажмите на шар или напишите сообщение');
 
 // ============================================================
-// 25. ПРОГРЕВ
+// 27. ПРОГРЕВ + ИНИЦИАЛИЗАЦИЯ
 // ============================================================
+updateGreeting();
 speechSynthesis.getVoices();
 refreshVoices();

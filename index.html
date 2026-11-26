@@ -22,6 +22,7 @@
                     <option value="philosopher">🧘 Философ</option>
                 </select>
             </div>
+            <button id="profileBtn" class="icon-btn" title="Профиль">👤</button>
             <button id="historyBtn" class="icon-btn" title="История">📜</button>
         </div>
 
@@ -34,7 +35,7 @@
 
         <div class="status" id="status">Нажмите на шар или напишите сообщение</div>
 
-        <!-- Таймер (скрыт по умолчанию) -->
+        <!-- Таймер -->
         <div class="timer" id="timer" style="display:none"></div>
 
         <!-- Настройки голоса -->
@@ -75,6 +76,17 @@
                 <button id="todoAddBtn">+</button>
             </div>
             <ul id="todoList" class="todo-list"></ul>
+        </div>
+
+        <!-- Панель профиля -->
+        <div class="panel" id="profilePanel">
+            <h3>Профиль</h3>
+            <div class="profile-row">
+                <input type="text" id="nameInput" placeholder="Ваше имя..." maxlength="30" />
+                <button id="saveNameBtn" class="tool-btn">Сохранить</button>
+            </div>
+            <p class="profile-hint" id="profileHint">Имя сохраняется только в вашем браузере. Нейросеть будет к вам обращаться по имени.</p>
+            <button id="logoutBtn" class="tool-btn" style="margin-top:10px">Выйти из профиля</button>
         </div>
     </div>
 

@@ -67,7 +67,7 @@ body {
 
 h1 { font-weight: 300; font-size: 1.6rem; margin-bottom: 20px; letter-spacing: 1px; }
 
-/* --- Орб (анимированный шар) --- */
+/* --- Орб --- */
 .orb {
     width: 140px; height: 140px;
     border-radius: 50%;
@@ -114,7 +114,6 @@ h1 { font-weight: 300; font-size: 1.6rem; margin-bottom: 20px; letter-spacing: 1
 
 .status { color: var(--muted); margin-bottom: 16px; font-size: 0.9rem; min-height: 1.2em; }
 
-/* --- Таймер --- */
 .timer {
     font-size: 2rem;
     font-weight: 300;
@@ -123,7 +122,6 @@ h1 { font-weight: 300; font-size: 1.6rem; margin-bottom: 20px; letter-spacing: 1
     font-variant-numeric: tabular-nums;
 }
 
-/* --- Голос --- */
 .voice-settings {
     display: flex;
     gap: 8px;
@@ -141,7 +139,6 @@ h1 { font-weight: 300; font-size: 1.6rem; margin-bottom: 20px; letter-spacing: 1
 }
 #volumeRange { width: 90px; accent-color: var(--primary); }
 
-/* --- Ввод --- */
 .text-input-row { display: flex; gap: 8px; margin-bottom: 10px; }
 #textInput {
     flex: 1;
@@ -169,7 +166,6 @@ h1 { font-weight: 300; font-size: 1.6rem; margin-bottom: 20px; letter-spacing: 1
 #sendBtn:hover { transform: scale(1.05); }
 #sendBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* --- Ответы --- */
 .transcript, .response {
     min-height: 30px;
     font-size: 1rem;
@@ -183,7 +179,6 @@ h1 { font-weight: 300; font-size: 1.6rem; margin-bottom: 20px; letter-spacing: 1
 .transcript { color: var(--muted); font-style: italic; }
 .response { color: var(--success); background: rgba(184, 245, 192, 0.08); }
 
-/* --- Тулбар --- */
 .toolbar {
     display: flex;
     justify-content: center;
@@ -203,7 +198,6 @@ h1 { font-weight: 300; font-size: 1.6rem; margin-bottom: 20px; letter-spacing: 1
 .tool-btn:hover { background: rgba(107,107,245,0.2); }
 .tool-btn.active { background: var(--primary); color: white; }
 
-/* --- Панели --- */
 .panel {
     display: none;
     margin-top: 16px;
@@ -270,9 +264,44 @@ h1 { font-weight: 300; font-size: 1.6rem; margin-bottom: 20px; letter-spacing: 1
     cursor: pointer; font-size: 1.1rem;
 }
 
+/* --- Профиль --- */
+.profile-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+#nameInput {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 0.95rem;
+    outline: none;
+}
+#nameInput:focus { border-color: var(--primary); }
+.profile-hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+/* Скрытие интерактива без профиля */
+.logged-out .orb,
+.logged-out .text-input-row,
+.logged-out .toolbar,
+.logged-out .voice-settings,
+.logged-out .transcript,
+.logged-out .response {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
 @media (max-width: 480px) {
     .orb { width: 110px; height: 110px; }
     h1 { font-size: 1.3rem; }
     .voice-settings { flex-wrap: wrap; }
     .toolbar { flex-wrap: wrap; }
+    .persona-select select { font-size: 0.8rem; padding: 6px 8px; }
 }
